@@ -49,7 +49,18 @@ const HeroGeometric: React.FC = () => {
 
     let time = 0;
 
+    const getRGBA = (r: number, g: number, b: number, a: number) => {
+      const safeAlpha = Number.isFinite(a) && !Number.isNaN(a) ? Math.max(0, Math.min(1, a)) : 0;
+      return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`;
+    };
+
     const draw = () => {
+      // Dynamic dimension check: Ensure width/height are correct even if initial render was 0
+      if (width <= 0 || height <= 0) {
+        width = canvas.width = canvas.offsetWidth;
+        height = canvas.height = canvas.offsetHeight;
+      }
+
       // Guard against zero dimensions to prevent NaN calculations
       if (width <= 0 || height <= 0) {
         animationFrameId = requestAnimationFrame(draw);
@@ -64,6 +75,7 @@ const HeroGeometric: React.FC = () => {
       // Evolving scale pulse
       const pulse = 1 + Math.sin(time * 1.5) * 0.08;
       // Ensure baseScale is strictly positive to prevent division by zero
+      // Use Math.max(..., 1) to ensure it's never 0
       const baseScale = Math.max(Math.min(width, height) * 0.22 * pulse, 1);
 
       time += 0.008;
@@ -90,7 +102,9 @@ const HeroGeometric: React.FC = () => {
           // Perspective
           const fov = 400; 
           const distance = 500;
-          const scale = fov / (distance + z2);
+          // Protect against division by zero or negative/small depth
+          const depth = distance + z2;
+          const scale = (depth > 1) ? fov / depth : 0;
           
           return {
             x: cx + x1 * scale,
@@ -118,12 +132,15 @@ const HeroGeometric: React.FC = () => {
             const p1 = icoProjected[i];
             const p2 = icoProjected[j];
             
+            // Skip if invalid scale
+            if (p1.scale <= 0 || p2.scale <= 0) continue;
+
             const avgZ = (p1.z + p2.z) / 2;
             const normalizedZ = (avgZ + baseScale) / (baseScale * 2);
             let alpha = Math.max(0.05, Math.min(0.6, 1 - normalizedZ));
-            if (isNaN(alpha)) alpha = 0.05;
+            if (!Number.isFinite(alpha) || Number.isNaN(alpha)) alpha = 0.05;
             
-            ctx.strokeStyle = `rgba(16, 185, 129, ${alpha})`; 
+            ctx.strokeStyle = getRGBA(16, 185, 129, alpha); 
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
@@ -144,12 +161,14 @@ const HeroGeometric: React.FC = () => {
             const p1 = sphereProjected[i];
             const p2 = sphereProjected[j];
             
+            if (p1.scale <= 0 || p2.scale <= 0) continue;
+
             const avgZ = (p1.z + p2.z) / 2;
             const normalizedZ = (avgZ + baseScale * 0.45) / (baseScale * 0.45 * 2); 
             let alpha = Math.max(0.1, Math.min(0.5, 1 - normalizedZ));
-            if (isNaN(alpha)) alpha = 0.1;
+            if (!Number.isFinite(alpha) || Number.isNaN(alpha)) alpha = 0.1;
             
-            ctx.strokeStyle = `rgba(217, 70, 239, ${alpha})`; 
+            ctx.strokeStyle = getRGBA(217, 70, 239, alpha);
             ctx.lineWidth = 0.5;
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
@@ -161,44 +180,63 @@ const HeroGeometric: React.FC = () => {
 
       // --- Draw Outer Nodes ---
       icoProjected.forEach(p => {
+        if (p.scale <= 0 || !Number.isFinite(p.scale)) return;
+
         const normalizedZ = (p.z + baseScale) / (baseScale * 2);
         let alpha = Math.max(0.2, Math.min(1, 1 - normalizedZ));
-        if (isNaN(alpha)) alpha = 0.5; // Safety fallback
+        if (!Number.isFinite(alpha) || Number.isNaN(alpha)) alpha = 0.5;
         
-        const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 10 * p.scale);
-        gradient.addColorStop(0, `rgba(52, 211, 153, ${alpha * 0.6})`);
-        gradient.addColorStop(1, 'rgba(52, 211, 153, 0)');
-        
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 10 * p.scale, 0, Math.PI * 2);
-        ctx.fill();
+        try {
+          // Cap radius to avoid extremely large gradients
+          const radius = Math.min(100, 10 * p.scale);
+          if (radius <= 0) return;
 
-        ctx.fillStyle = `rgba(255, 255, 255, ${alpha + 0.3})`;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 2.5 * p.scale, 0, Math.PI * 2);
-        ctx.fill();
+          const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
+          gradient.addColorStop(0, getRGBA(52, 211, 153, alpha * 0.6));
+          gradient.addColorStop(1, getRGBA(52, 211, 153, 0));
+          
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = getRGBA(255, 255, 255, alpha + 0.3);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, Math.min(20, 2.5 * p.scale), 0, Math.PI * 2);
+          ctx.fill();
+        } catch (e) {
+          // Fallback if gradient fails
+        }
       });
 
       // --- Draw Inner Nodes ---
       sphereProjected.forEach(p => {
+        if (p.scale <= 0 || !Number.isFinite(p.scale)) return;
+
         const normalizedZ = (p.z + baseScale * 0.45) / (baseScale * 0.45 * 2);
         let alpha = Math.max(0.2, Math.min(1, 1 - normalizedZ));
-        if (isNaN(alpha)) alpha = 0.5; // Safety fallback
+        if (!Number.isFinite(alpha) || Number.isNaN(alpha)) alpha = 0.5;
         
-        const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 6 * p.scale);
-        gradient.addColorStop(0, `rgba(217, 70, 239, ${alpha * 0.6})`);
-        gradient.addColorStop(1, 'rgba(217, 70, 239, 0)');
-        
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 6 * p.scale, 0, Math.PI * 2);
-        ctx.fill();
+        try {
+          const radius = Math.min(60, 6 * p.scale);
+          if (radius <= 0) return;
 
-        ctx.fillStyle = `rgba(255, 255, 255, ${alpha + 0.3})`;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 1.5 * p.scale, 0, Math.PI * 2);
-        ctx.fill();
+          const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
+          gradient.addColorStop(0, getRGBA(217, 70, 239, alpha * 0.6));
+          gradient.addColorStop(1, getRGBA(217, 70, 239, 0));
+          
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = getRGBA(255, 255, 255, alpha + 0.3);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, Math.min(15, 1.5 * p.scale), 0, Math.PI * 2);
+          ctx.fill();
+        } catch (e) {
+          // Fallback
+        }
       });
 
       animationFrameId = requestAnimationFrame(draw);

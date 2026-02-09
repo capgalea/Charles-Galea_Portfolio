@@ -21,6 +21,8 @@ const App: React.FC = () => {
           <Route path="/experience" element={<Experience />} />
           <Route path="/education" element={<Education />} />
           <Route path="/contact" element={<Contact />} />
+          {/* Catch-all route to handle 404s or direct access to unknown paths */}
+          <Route path="*" element={<Navigate to="/about" replace />} />
         </Routes>
       </Layout>
     </Router>
