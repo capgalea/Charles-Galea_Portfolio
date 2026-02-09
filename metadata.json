@@ -1,0 +1,8 @@
+{
+  "name": "Charles Galea - Data Scientist Portfolio",
+  "description": "Portfolio of Charles Galea, Senior Data Scientist specializing in Machine Learning, Process Automation, and Biomedical Research.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
